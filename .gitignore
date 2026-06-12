@@ -1,0 +1,19 @@
+# Build outputs
+/build/
+/app/build/
+
+# Signing secrets — NEVER commit
+keystore.properties
+*.jks
+*.keystore
+
+# Gradle caches
+.gradle/
+
+# IDE directories (project must not depend on these)
+.idea/
+*.iml
+.vscode/
+
+# Local SDK paths
+local.properties
