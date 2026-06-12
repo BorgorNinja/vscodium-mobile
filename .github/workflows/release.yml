@@ -16,6 +16,9 @@ on:
         required: true
         default: "1"
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     name: Build APKs and publish release
