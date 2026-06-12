@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.vscodium.mobile.data.model.EditorSettings
 import dev.vscodium.mobile.data.repository.FileRepository
@@ -48,6 +49,7 @@ import dev.vscodium.mobile.ui.explorer.FileExplorerPanel
 import dev.vscodium.mobile.ui.explorer.FileTreeViewModel
 import dev.vscodium.mobile.ui.navigation.EditorTabBar
 import dev.vscodium.mobile.ui.settings.SettingsScreen
+import dev.vscodium.mobile.ui.statusbar.StatusBar
 import kotlinx.coroutines.launch
 
 private enum class RightPanel { NONE, SETTINGS }
@@ -75,7 +77,7 @@ fun MainScreen() {
     }
 
     // Restore the last opened folder, if any.
-    androidx.compose.runtime.LaunchedEffect(settings.lastFolderUri) {
+    LaunchedEffect(settings.lastFolderUri) {
         val saved = settings.lastFolderUri
         if (saved != null && fileTreeViewModel.rootUri == null) {
             fileTreeViewModel.openFolder(Uri.parse(saved))
@@ -126,6 +128,11 @@ fun MainScreen() {
                         }
                     }
                 )
+            },
+            bottomBar = {
+                // VS Code's signature blue status bar, present across both the
+                // editor and settings panels.
+                StatusBar(activeTab = editorViewModel.activeTab)
             }
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
