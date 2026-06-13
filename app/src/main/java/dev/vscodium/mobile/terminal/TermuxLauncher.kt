@@ -6,11 +6,14 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 
 /**
- * Talks to the Termux app via its `RUN_COMMAND` intent API to start an ncat
- * listener that the app then connects out to.
+ * Sends a RUN_COMMAND intent to Termux to start an ncat listener that the app
+ * connects to via the device's own non-loopback IP.
  *
- * Requires Termux installed, "Allow External Apps" enabled in termux.properties,
- * and the `com.termux.permission.RUN_COMMAND` permission granted to this app.
+ * WHY 0.0.0.0:
+ * Binding ncat to 127.0.0.1 means it only accepts on the loopback interface,
+ * where Android's per-UID iptables rules silently drop cross-app packets.
+ * Binding to 0.0.0.0 lets the app reach ncat via the WiFi/cellular IP instead,
+ * which routes through wlan0/rmnet0 and bypasses the loopback UID filter.
  */
 object TermuxLauncher {
     const val TERMUX_PACKAGE = "com.termux"
@@ -34,15 +37,15 @@ object TermuxLauncher {
             PackageManager.PERMISSION_GRANTED
 
     /**
-     * Asks Termux to start an ncat listener on [TermuxBridgeServer.BRIDGE_PORT].
-     * Ncat's -e flag hands stdin/stdout directly to bash, giving the app a clean
-     * interactive shell once it connects out to that port.
+     * Starts: ncat -l 0.0.0.0 [PORT] -e bash
      *
-     * Connection direction: app (client) → Termux ncat (server)
-     * This direction is permitted by Android's loopback UID isolation.
+     * ncat binds on all interfaces so the app can reach it via the device's
+     * own WiFi/cellular address rather than the UID-filtered loopback.
+     * [TermuxBridgeServer.findLocalIp] picks that address at connect time.
      */
     fun launchBridgeSession(context: Context): Boolean {
-        val script = "$NCAT_PATH -l 127.0.0.1 ${TermuxBridgeServer.BRIDGE_PORT} -e $SHELL_PATH"
+        val script =
+            "$NCAT_PATH -l 0.0.0.0 ${TermuxBridgeServer.BRIDGE_PORT} -e $SHELL_PATH"
 
         val intent = Intent(ACTION_RUN_COMMAND).apply {
             setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
