@@ -6,12 +6,11 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 
 /**
- * Talks to the Termux app via its `RUN_COMMAND` intent API to attach an
- * interactive bash session to [TermuxBridgeServer]'s loopback socket.
+ * Talks to the Termux app via its `RUN_COMMAND` intent API to start an ncat
+ * listener that the app then connects out to.
  *
- * This requires the Termux app to be installed, "Allow external apps" enabled
- * in Termux settings, and the `com.termux.permission.RUN_COMMAND` permission
- * granted to this app.
+ * Requires Termux installed, "Allow External Apps" enabled in termux.properties,
+ * and the `com.termux.permission.RUN_COMMAND` permission granted to this app.
  */
 object TermuxLauncher {
     const val TERMUX_PACKAGE = "com.termux"
@@ -20,6 +19,7 @@ object TermuxLauncher {
     private const val RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"
     private const val ACTION_RUN_COMMAND = "com.termux.RUN_COMMAND"
     private const val SHELL_PATH = "/data/data/com.termux/files/usr/bin/bash"
+    private const val NCAT_PATH = "/data/data/com.termux/files/usr/bin/ncat"
 
     fun isTermuxInstalled(context: Context): Boolean =
         try {
@@ -34,14 +34,15 @@ object TermuxLauncher {
             PackageManager.PERMISSION_GRANTED
 
     /**
-     * Asks Termux to run a bash shell that immediately attaches itself
-     * (stdin/stdout/stderr) to the loopback bridge listening on [port].
-     * Returns false if Termux rejected the request.
+     * Asks Termux to start an ncat listener on [TermuxBridgeServer.BRIDGE_PORT].
+     * Ncat's -e flag hands stdin/stdout directly to bash, giving the app a clean
+     * interactive shell once it connects out to that port.
+     *
+     * Connection direction: app (client) → Termux ncat (server)
+     * This direction is permitted by Android's loopback UID isolation.
      */
-    fun launchBridgeSession(context: Context, port: Int): Boolean {
-        // Open fd 3 as a duplex pipe to the bridge socket, then replace the
-        // shell with an interactive bash whose stdio is that socket.
-        val script = "exec 3<>/dev/tcp/127.0.0.1/$port; exec bash -i <&3 >&3 2>&3"
+    fun launchBridgeSession(context: Context): Boolean {
+        val script = "$NCAT_PATH -l 127.0.0.1 ${TermuxBridgeServer.BRIDGE_PORT} -e $SHELL_PATH"
 
         val intent = Intent(ACTION_RUN_COMMAND).apply {
             setClassName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
