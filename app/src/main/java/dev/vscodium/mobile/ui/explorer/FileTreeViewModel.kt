@@ -58,6 +58,43 @@ class FileTreeViewModel(private val fileRepository: FileRepository) : ViewModel(
         }
     }
 
+    /**
+     * Creates a new file named [name] inside [parent] (or inside the root
+     * folder if [parent] is `null`), expands that directory so the new entry
+     * is immediately visible, and reports the new file's URI via
+     * [onCreated] so callers can open it right away.
+     */
+    fun createFile(parent: FileNode?, name: String, onCreated: (Uri) -> Unit = {}) {
+        createEntry(parent, name, isDirectory = false, onCreated = onCreated)
+    }
+
+    /** Creates a new subfolder named [name] inside [parent] (or the root folder if `null`). */
+    fun createFolder(parent: FileNode?, name: String) {
+        createEntry(parent, name, isDirectory = true)
+    }
+
+    private fun createEntry(parent: FileNode?, name: String, isDirectory: Boolean, onCreated: (Uri) -> Unit = {}) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val parentUri = parent?.uri ?: rootUri ?: return
+        val childDepth = (parent?.depth ?: -1) + 1
+
+        viewModelScope.launch {
+            val createdUri = if (isDirectory) {
+                fileRepository.createDirectory(parentUri, trimmed)
+            } else {
+                fileRepository.createFile(parentUri, trimmed)
+            }
+            if (createdUri != null) {
+                expanded += parentUri
+                val children = fileRepository.listChildren(parentUri, depth = childDepth)
+                childrenCache[parentUri] = children
+                rebuild()
+                onCreated(createdUri)
+            }
+        }
+    }
+
     private fun rebuild() {
         val root = rootUri ?: return
         val result = mutableListOf<FileNode>()
