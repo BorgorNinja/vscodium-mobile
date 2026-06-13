@@ -12,26 +12,30 @@ import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStream
-import java.net.InetAddress
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import java.net.Socket
 
 enum class TermuxConnectionState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
 /**
- * Connects out to a local ncat listener started inside Termux by [TermuxLauncher].
+ * Connects out to an ncat listener started inside Termux by [TermuxLauncher].
  *
- * Architecture reversal: the app is now the TCP *client*; Termux is the *server*.
- * This sidesteps Android's per-UID loopback isolation which blocks
- * Termux-UID → app-UID connections but permits app-UID → Termux-UID connections.
+ * WHY NOT 127.0.0.1:
+ * Android (and especially Infinix's ROM) enforces per-UID loopback isolation via
+ * iptables rules on the `lo` interface. Packets from one app UID to a socket owned
+ * by a different app UID on 127.0.0.1 are silently dropped in both directions.
  *
- * Termux runs: ncat -l 127.0.0.1 [BRIDGE_PORT] -e bash
- * This app connects out to that port and pipes I/O through the socket.
+ * THE FIX:
+ * ncat binds on 0.0.0.0 and the app connects via the device's own non-loopback
+ * IPv4 address (e.g. the WiFi or mobile-data IP). That traffic routes through
+ * `wlan0`/`rmnet0` instead of `lo`, so the UID filter is never applied.
  */
 class TermuxBridgeServer(private val scope: CoroutineScope) {
 
     companion object {
         const val BRIDGE_PORT = 12399
-        private const val CONNECT_RETRIES = 10
+        private const val CONNECT_RETRIES = 12
         private const val RETRY_DELAY_MS = 500L
     }
 
@@ -46,9 +50,26 @@ class TermuxBridgeServer(private val scope: CoroutineScope) {
     val output: StateFlow<String> = _output
 
     /**
-     * Attempts to connect to the ncat listener on [BRIDGE_PORT], retrying up to
-     * [CONNECT_RETRIES] times with [RETRY_DELAY_MS] gaps to give Termux time to
-     * start listening before we give up.
+     * Returns the device's first non-loopback, non-link-local IPv4 address.
+     * Prefers `wlan0` (WiFi) but falls back to any live interface.
+     * Returns null only if the device has no usable network interface up.
+     */
+    private fun findLocalIp(): String? = try {
+        NetworkInterface.getNetworkInterfaces()
+            ?.asSequence()
+            ?.filter { it.isUp && !it.isLoopback }
+            ?.flatMap { it.inetAddresses.asSequence() }
+            ?.filterIsInstance<Inet4Address>()
+            ?.filterNot { it.isLinkLocalAddress }
+            ?.firstOrNull()
+            ?.hostAddress
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * Resolves the host, then retries the TCP connect up to [CONNECT_RETRIES]
+     * times with [RETRY_DELAY_MS] gaps — giving Termux time to start ncat.
      */
     fun connect() {
         stop()
@@ -56,11 +77,17 @@ class TermuxBridgeServer(private val scope: CoroutineScope) {
         _output.value = ""
 
         connectJob = scope.launch(Dispatchers.IO) {
+            val host = findLocalIp()
+            if (host == null) {
+                _state.value = TermuxConnectionState.ERROR
+                return@launch
+            }
+
             var connected = false
             repeat(CONNECT_RETRIES) { attempt ->
                 if (!isActive) return@launch
                 try {
-                    val s = Socket(InetAddress.getLoopbackAddress(), BRIDGE_PORT)
+                    val s = Socket(host, BRIDGE_PORT)
                     socket = s
                     outputStream = s.getOutputStream()
                     _state.value = TermuxConnectionState.CONNECTED
@@ -82,7 +109,7 @@ class TermuxBridgeServer(private val scope: CoroutineScope) {
         }
     }
 
-    /** Sends a line of input to the connected bash session, appending a newline. */
+    /** Sends a line of input to the connected bash session. */
     fun send(command: String) {
         val out = outputStream ?: return
         scope.launch(Dispatchers.IO) {
@@ -97,7 +124,6 @@ class TermuxBridgeServer(private val scope: CoroutineScope) {
 
     fun clearOutput() { _output.value = "" }
 
-    /** Closes the session and frees the socket. */
     fun stop() {
         _state.value = TermuxConnectionState.DISCONNECTED
         connectJob?.cancel()
