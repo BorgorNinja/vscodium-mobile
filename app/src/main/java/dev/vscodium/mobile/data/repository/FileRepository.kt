@@ -47,6 +47,30 @@ class FileRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Creates an empty file named [name] inside [parentUri] and returns its
+     * URI, or `null` if the parent can't be resolved or the provider refuses
+     * (e.g. a file with that name already exists).
+     */
+    suspend fun createFile(parentUri: Uri, name: String): Uri? = withContext(Dispatchers.IO) {
+        val parent = DocumentFile.fromTreeUri(context, parentUri) ?: return@withContext null
+        if (parent.findFile(name) != null) return@withContext null
+        // "application/octet-stream" avoids document providers rewriting or
+        // appending an extension to [name] based on a guessed MIME type.
+        parent.createFile("application/octet-stream", name)?.uri
+    }
+
+    /**
+     * Creates a subdirectory named [name] inside [parentUri] and returns its
+     * URI, or `null` if the parent can't be resolved or a file/folder with
+     * that name already exists.
+     */
+    suspend fun createDirectory(parentUri: Uri, name: String): Uri? = withContext(Dispatchers.IO) {
+        val parent = DocumentFile.fromTreeUri(context, parentUri) ?: return@withContext null
+        if (parent.findFile(name) != null) return@withContext null
+        parent.createDirectory(name)?.uri
+    }
+
     /** Persists read/write access to a tree the user picked via OpenDocumentTree. */
     fun takePersistablePermission(uri: Uri) {
         context.contentResolver.takePersistableUriPermission(
