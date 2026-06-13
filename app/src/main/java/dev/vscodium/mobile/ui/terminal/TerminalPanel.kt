@@ -161,7 +161,7 @@ private fun ColumnScope.CenteredMessage(message: String) {
 
 private fun TermuxConnectionState.label(): String = when (this) {
     TermuxConnectionState.DISCONNECTED -> "Disconnected"
-    TermuxConnectionState.LISTENING -> "Waiting\u2026"
-    TermuxConnectionState.CONNECTED -> "Connected"
-    TermuxConnectionState.ERROR -> "Error"
+    TermuxConnectionState.CONNECTING   -> "Connecting\u2026"
+    TermuxConnectionState.CONNECTED    -> "Connected"
+    TermuxConnectionState.ERROR        -> "Error"
 }
