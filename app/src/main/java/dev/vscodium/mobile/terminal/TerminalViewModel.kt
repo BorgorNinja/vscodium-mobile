@@ -24,6 +24,11 @@ class TerminalViewModel : ViewModel() {
     fun launchSession(context: Context) {
         _error.value = null
         val port = bridge.startListening()
+        if (port == null) {
+            _error.value = "Couldn't open the local terminal bridge socket. " +
+                "Make sure the app has network access and try again."
+            return
+        }
         val ok = TermuxLauncher.launchBridgeSession(context, port)
         if (!ok) {
             _error.value = "Termux refused the request. Grant the RUN_COMMAND permission and try again."
