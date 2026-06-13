@@ -40,10 +40,25 @@ class TermuxBridgeServer(private val scope: CoroutineScope) {
     private val _output = MutableStateFlow("")
     val output: StateFlow<String> = _output
 
-    /** Opens a loopback server socket on a free port and starts listening for the Termux session. */
-    fun startListening(): Int {
+    /**
+     * Opens a loopback server socket on a free port and starts listening for the Termux session.
+     *
+     * Returns the bound port, or `null` if the socket could not be created/bound (e.g. the app is
+     * missing the `android.permission.INTERNET` permission, which Android requires for *any*
+     * socket - including loopback-only ones - because it gates membership of the app's UID in the
+     * `inet` group).
+     */
+    fun startListening(): Int? {
         stop()
-        val socket = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        val socket = try {
+            ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        } catch (e: IOException) {
+            _state.value = TermuxConnectionState.ERROR
+            return null
+        } catch (e: SecurityException) {
+            _state.value = TermuxConnectionState.ERROR
+            return null
+        }
         serverSocket = socket
         port = socket.localPort
         _state.value = TermuxConnectionState.LISTENING
