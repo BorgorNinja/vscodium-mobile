@@ -90,6 +90,7 @@ fun MainScreen() {
             ModalDrawerSheet {
                 FileExplorerPanel(
                     rootName = fileTreeViewModel.rootName,
+                    hasRoot = fileTreeViewModel.rootUri != null,
                     nodes = fileTreeViewModel.visibleNodes,
                     onNodeClick = { node ->
                         if (node.isDirectory) {
@@ -100,6 +101,13 @@ fun MainScreen() {
                         }
                     },
                     onOpenFolderClick = { folderPicker.launch(null) },
+                    onCreateFile = { parent, name ->
+                        fileTreeViewModel.createFile(parent, name) { uri ->
+                            editorViewModel.openFile(uri, name)
+                            scope.launch { drawerState.close() }
+                        }
+                    },
+                    onCreateFolder = { parent, name -> fileTreeViewModel.createFolder(parent, name) },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
