@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -50,6 +51,7 @@ import dev.vscodium.mobile.ui.explorer.FileTreeViewModel
 import dev.vscodium.mobile.ui.navigation.EditorTabBar
 import dev.vscodium.mobile.ui.settings.SettingsScreen
 import dev.vscodium.mobile.ui.statusbar.StatusBar
+import dev.vscodium.mobile.ui.terminal.TerminalPanel
 import kotlinx.coroutines.launch
 
 private enum class RightPanel { NONE, SETTINGS }
@@ -68,6 +70,7 @@ fun MainScreen() {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     var rightPanel by remember { mutableStateOf(RightPanel.NONE) }
+    var showTerminal by remember { mutableStateOf(false) }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
@@ -129,6 +132,9 @@ fun MainScreen() {
                         IconButton(onClick = { editorViewModel.saveActiveTab() }) {
                             Icon(Icons.Filled.Save, contentDescription = "Save")
                         }
+                        IconButton(onClick = { showTerminal = !showTerminal }) {
+                            Icon(Icons.Filled.Terminal, contentDescription = "Terminal")
+                        }
                         IconButton(onClick = {
                             rightPanel = if (rightPanel == RightPanel.SETTINGS) RightPanel.NONE else RightPanel.SETTINGS
                         }) {
@@ -164,19 +170,26 @@ fun MainScreen() {
                             HorizontalDivider()
                         }
 
-                        val activeTab = editorViewModel.activeTab
-                        if (activeTab != null) {
-                            CodeEditorField(
-                                value = activeTab.field.value,
-                                onValueChange = { editorViewModel.onContentChanged(activeTab, it) },
-                                language = activeTab.language,
-                                fontSize = settings.fontSize,
-                                showLineNumbers = settings.showLineNumbers,
-                                wordWrap = settings.wordWrap,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            EmptyState(onOpenFolderClick = { folderPicker.launch(null) })
+                        Box(modifier = Modifier.weight(if (showTerminal) 0.6f else 1f)) {
+                            val activeTab = editorViewModel.activeTab
+                            if (activeTab != null) {
+                                CodeEditorField(
+                                    value = activeTab.field.value,
+                                    onValueChange = { editorViewModel.onContentChanged(activeTab, it) },
+                                    language = activeTab.language,
+                                    fontSize = settings.fontSize,
+                                    showLineNumbers = settings.showLineNumbers,
+                                    wordWrap = settings.wordWrap,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                EmptyState(onOpenFolderClick = { folderPicker.launch(null) })
+                            }
+                        }
+
+                        if (showTerminal) {
+                            HorizontalDivider()
+                            TerminalPanel(modifier = Modifier.weight(0.4f))
                         }
                     }
                 }

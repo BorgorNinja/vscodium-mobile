@@ -6,6 +6,13 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
 
+    <!-- Required to launch and pipe I/O to a Termux shell via RUN_COMMAND -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND"/>
+
+    <queries>
+        <package android:name="com.termux"/>
+    </queries>
+
     <application
         android:name=".VSCodiumMobileApplication"
         android:label="@string/app_name"
