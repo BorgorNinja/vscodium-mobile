@@ -1,20 +1,23 @@
 name: Build & Release APKs
 
 on:
+  workflow_run:
+    workflows: ["Build Debug APK"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v0.1.0-dev)"
-        required: true
-        default: "v0.1.0-dev"
+        description: "Release tag (e.g. v0.1.0). Leave empty to auto-increment from the latest release."
+        required: false
+        default: ""
       version_name:
-        description: "App versionName"
-        required: true
-        default: "0.1.0-dev"
+        description: "App versionName. Leave empty to auto-increment."
+        required: false
+        default: ""
       version_code:
-        description: "App versionCode"
-        required: true
-        default: "1"
+        description: "App versionCode. Leave empty to use the run number."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -23,10 +26,56 @@ jobs:
   build-and-release:
     name: Build APKs and publish release
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Determine version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          if [ -n "$INPUT_TAG" ] && [ -n "$INPUT_VERSION_NAME" ]; then
+            TAG="$INPUT_TAG"
+            VERSION_NAME="$INPUT_VERSION_NAME"
+          else
+            LATEST_TAG=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tag_name',''))")
+
+            if [ -z "$LATEST_TAG" ]; then
+              LATEST_TAG="v0.1.0"
+            fi
+
+            VER=${LATEST_TAG#v}
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+            MAJOR=${MAJOR:-0}
+            MINOR=${MINOR:-1}
+            PATCH=${PATCH:-0}
+
+            VERSION_NAME="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            TAG="v${VERSION_NAME}"
+          fi
+
+          if [ -n "$INPUT_VERSION_CODE" ]; then
+            VERSION_CODE="$INPUT_VERSION_CODE"
+          else
+            VERSION_CODE="${{ github.run_number }}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $TAG (versionName=$VERSION_NAME, versionCode=$VERSION_CODE)"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -58,8 +107,8 @@ jobs:
       - name: Build debug APK
         run: |
           ./gradlew assembleDebug --no-daemon --stacktrace \
-            -PversionName=${{ inputs.version_name }} \
-            -PversionCode=${{ inputs.version_code }}
+            -PversionName=${{ steps.version.outputs.version_name }} \
+            -PversionCode=${{ steps.version.outputs.version_code }}
 
       # ─── Generate a release signing key (ephemeral, for this build) ────────
       - name: Generate signing keystore
@@ -85,14 +134,14 @@ jobs:
       - name: Build signed release APK
         run: |
           ./gradlew assembleRelease --no-daemon --stacktrace \
-            -PversionName=${{ inputs.version_name }} \
-            -PversionCode=${{ inputs.version_code }}
+            -PversionName=${{ steps.version.outputs.version_name }} \
+            -PversionCode=${{ steps.version.outputs.version_code }}
 
       - name: Rename APKs for release
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/vscodium-mobile-${{ inputs.version_name }}-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk out/vscodium-mobile-${{ inputs.version_name }}-release-signed.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/vscodium-mobile-${{ steps.version.outputs.version_name }}-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk out/vscodium-mobile-${{ steps.version.outputs.version_name }}-release-signed.apk
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
@@ -109,7 +158,7 @@ jobs:
       - name: Upload signing keystore (keep this safe for future updates!)
         uses: actions/upload-artifact@v4
         with:
-          name: signing-keystore
+          name: signing-keystore-${{ steps.version.outputs.version_name }}
           path: |
             vscodium-mobile.jks
             keystore.properties
@@ -118,16 +167,16 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag }}
-          name: VSCodium Mobile ${{ inputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: VSCodium Mobile ${{ steps.version.outputs.tag }}
           body: |
-            Initial automated build of VSCodium Mobile.
+            Automated build of VSCodium Mobile (versionName ${{ steps.version.outputs.version_name }}, versionCode ${{ steps.version.outputs.version_code }}).
 
             - `*-debug.apk` — unsigned debug build (debuggable, no minification).
             - `*-release-signed.apk` — minified, R8-shrunk release build signed
               with a freshly generated key for this build. The keystore used to
-              sign this build is uploaded as the `signing-keystore` workflow
-              artifact — download and keep it safe if you plan to publish
+              sign this build is uploaded as the `signing-keystore-${{ steps.version.outputs.version_name }}`
+              workflow artifact — download and keep it safe if you plan to publish
               future updates that need to share the same signing key.
           files: |
             out/*-debug.apk
