@@ -3,9 +3,14 @@ package dev.vscodium.mobile.ui.statusbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,14 +25,22 @@ import dev.vscodium.mobile.data.model.EditorTab
  * VS Code's signature blue status bar, trimmed down to what's useful on a
  * phone: the active file's dirty state, cursor position, encoding, line
  * ending and language mode — mirroring the bottom bar of desktop VSCodium.
+ *
+ * The bar sits in the Scaffold's bottomBar slot, which (in an edge-to-edge
+ * layout) is drawn behind the system navigation bar by default. It applies
+ * the navigation bar inset itself so it never ends up underneath the
+ * gesture/3-button nav area, and unions that with the IME inset so that when
+ * the on-screen keyboard appears, the bar rides up to sit just above it
+ * instead of staying pinned under (now hidden) navigation buttons.
  */
 @Composable
 fun StatusBar(activeTab: EditorTab?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
             .background(Color(0xFF007ACC))
+            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+            .height(28.dp)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
