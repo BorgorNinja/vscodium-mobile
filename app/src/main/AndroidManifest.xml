@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
 
+    <!-- Required for the loopback TCP bridge used by the integrated terminal.
+         Even 127.0.0.1-only sockets require INTERNET on Android, since the
+         app's UID must be in the "inet" group to create sockets at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Required to launch and pipe I/O to a Termux shell via RUN_COMMAND -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND"/>
 
