@@ -3,8 +3,10 @@ package dev.vscodium.mobile.terminal
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /** Drives a [TermuxBridgeServer] session and exposes its state to the UI. */
 class TerminalViewModel : ViewModel() {
@@ -20,19 +22,22 @@ class TerminalViewModel : ViewModel() {
     fun hasPermission(context: Context) = TermuxLauncher.hasRunCommandPermission(context)
     fun permissionName(): String = TermuxLauncher.RUN_COMMAND_PERMISSION
 
-    /** Opens the loopback bridge, then asks Termux to attach a shell to it. */
+    /**
+     * Fires the RUN_COMMAND intent to start ncat in Termux, waits briefly for
+     * the listener to be ready, then connects the bridge.
+     */
     fun launchSession(context: Context) {
         _error.value = null
-        val port = bridge.startListening()
-        if (port == null) {
-            _error.value = "Couldn't open the local terminal bridge socket. " +
-                "Make sure the app has network access and try again."
+        val ok = TermuxLauncher.launchBridgeSession(context)
+        if (!ok) {
+            _error.value = "Termux refused the request. " +
+                "Grant the RUN_COMMAND permission and try again."
             return
         }
-        val ok = TermuxLauncher.launchBridgeSession(context, port)
-        if (!ok) {
-            _error.value = "Termux refused the request. Grant the RUN_COMMAND permission and try again."
-            bridge.stop()
+        // Allow Termux a moment to start ncat before the app connects out
+        viewModelScope.launch {
+            delay(400)
+            bridge.connect()
         }
     }
 
