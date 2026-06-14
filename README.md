@@ -66,8 +66,8 @@ echo "allow-external-apps = true" >> ~/.termux/termux.properties
 termux-reload-settings
 ```
 
-This allows VSCodium Mobile to send `RUN_COMMAND` intents to Termux.
-Without this, the terminal button will fail with an error immediately.
+This allows VSCodium Mobile to send `RUN_COMMAND` intents to Termux and is
+the only configuration Termux requires. No ADB or root is needed.
 
 ### Step 3 - Install ncat
 
@@ -77,21 +77,8 @@ The terminal bridge uses ncat (part of nmap) to relay the shell session:
 pkg install nmap
 ```
 
-### Step 4 - Grant the RUN_COMMAND permission
-
-VSCodium Mobile needs `com.termux.permission.RUN_COMMAND` to launch shell
-sessions. On Android 10+, grant it via ADB:
-
-```bash
-adb shell pm grant dev.vscodium.mobile com.termux.permission.RUN_COMMAND
-```
-
-Or if you have [Shizuku](https://shizuku.rikka.app/) / `rish` available,
-run from inside that shell:
-
-```bash
-pm grant dev.vscodium.mobile com.termux.permission.RUN_COMMAND
-```
+That's it. Open VSCodium Mobile, tap the terminal icon, and press the
+connect button.
 
 ### How the bridge works
 
@@ -118,7 +105,6 @@ The bridge works around this by:
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | Status immediately shows **Error** | `allow-external-apps` not set | Step 2 |
-| Termux shows a task but app stays **Connecting** | RUN_COMMAND permission missing | Step 4 |
 | Commands sent but no output appears | `ncat`/`nmap` not installed | Step 3 |
 | Port already in use on reconnect | Previous ncat session still running | Run `pkill ncat` in Termux |
 | Terminal works on WiFi but not mobile data | Device IP changed | Disconnect and reconnect |
